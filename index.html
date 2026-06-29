@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WS タイトルカウンター</title>
+<style>
+  :root{
+    --bg:#0f1320; --panel:#1a2032; --panel2:#222a40; --line:#313a55;
+    --txt:#e8ecf6; --sub:#9aa6c4; --accent:#ff5c8a; --accent2:#5cc8ff;
+    --ok:#36d399; --warn:#f6c945;
+    --headerbg:rgba(15,19,32,.96);
+    --counted-bg:linear-gradient(135deg,#2a2036,#241b2e);
+    --indexbg:rgba(34,42,64,.72);
+    --danger-bg:#3a2230; --danger-fg:#ff8aa9; --danger-bd:#6a2f47;
+  }
+  body.light{
+    --bg:#f4f6fb; --panel:#ffffff; --panel2:#eef1f8; --line:#d3d9e6;
+    --txt:#1a2032; --sub:#5b6680; --accent:#ff4b82; --accent2:#1f8fd0;
+    --headerbg:rgba(244,246,251,.96);
+    --counted-bg:#ffe9f0;
+    --indexbg:rgba(225,231,243,.92);
+    --danger-bg:#ffe2ea; --danger-fg:#c2185b; --danger-bd:#f3b6c8;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    font-size:16px; line-height:1.5; padding-bottom:40px;
+  }
+  header{
+    position:sticky; top:0; z-index:20; background:var(--headerbg);
+    backdrop-filter:blur(6px); border-bottom:1px solid var(--line);
+    padding:8px 14px;
+  }
+  .mark{color:var(--accent);}
+  .stat b, .note b{color:var(--accent2); font-size:20px; font-weight:700;}
+  .ev-input{
+    width:100%; background:var(--panel2); border:1px solid var(--line);
+    color:var(--txt); border-radius:8px; padding:9px 11px; font-size:16px;
+  }
+  .tabs{display:flex; gap:6px;}
+  .tabs button{
+    flex:1; background:var(--panel); color:var(--sub); border:1px solid var(--line);
+    border-radius:10px 10px 0 0; padding:9px; font-size:15px; font-weight:600; cursor:pointer;
+  }
+  .tabs button.on{background:var(--panel2); color:var(--txt); border-bottom-color:var(--panel2);}
+  main{padding:12px 14px; max-width:980px; margin:0 auto;}
+  .view{display:none;} .view.on{display:block;}
+
+  /* ---- 入力タブ ---- */
+  .controls{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;}
+  .search{flex:1 1 200px; position:relative;}
+  .search input{
+    width:100%; background:var(--panel2); border:1px solid var(--line);
+    color:var(--txt); border-radius:10px; padding:9px 32px 9px 12px; font-size:15px;
+  }
+  .search .clr{position:absolute; right:8px; top:50%; transform:translateY(-50%);
+    color:var(--sub); cursor:pointer; border:none; background:none; font-size:18px;}
+  .seg{display:flex; border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+  .seg button{background:var(--panel2); color:var(--sub); border:none; padding:9px 12px; font-size:14px; cursor:pointer;}
+  .seg button.on{background:var(--accent); color:#fff; font-weight:700;}
+
+  /* タイトル一覧（縦長リスト） */
+  .list{display:flex; flex-direction:column; gap:7px; padding-right:28px;}
+  .sec-head{
+    position:sticky; top:var(--hh,72px); z-index:5; margin:2px 0 -2px;
+    background:var(--bg);
+    color:var(--accent2); font-weight:700; font-size:14px; padding:8px 4px 5px;
+  }
+  .card{
+    position:relative; text-align:left; background:var(--panel); color:var(--txt);
+    border:1px solid var(--line); border-radius:12px; padding:14px; min-height:54px;
+    font-size:16px; cursor:pointer; transition:transform .05s, border-color .1s, background .1s;
+    display:flex; align-items:center; gap:10px; word-break:break-word;
+  }
+  .card:active{transform:scale(.99);}
+  .card.counted{border-color:var(--accent); background:var(--counted-bg);}
+  .card .nm{flex:1;}
+  .card .cnt{
+    flex:0 0 auto; background:var(--accent); color:#fff; min-width:30px; height:30px;
+    border-radius:15px; font-weight:700; font-size:15px; padding:0 9px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .card .minus{
+    flex:0 0 auto; width:42px; height:42px; border-radius:10px;
+    border:1px solid var(--line); background:var(--panel2); color:var(--accent2);
+    font-size:24px; line-height:1; display:none; align-items:center; justify-content:center;
+  }
+  .card.counted .minus{display:flex;}
+  .empty{color:var(--sub); text-align:center; padding:30px;}
+
+  /* iPhone風 50音インデックスバー */
+  .indexbar{
+    position:fixed; right:2px; top:50%; transform:translateY(-50%); z-index:30;
+    display:none; flex-direction:column; align-items:center; gap:1px;
+    padding:6px 3px; border-radius:14px; background:var(--indexbg); backdrop-filter:blur(4px);
+    user-select:none; touch-action:none;
+  }
+  .indexbar .idx{
+    font-size:11px; font-weight:700; color:var(--accent2); line-height:1;
+    width:20px; height:17px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .indexbar .idx:active{color:#fff;}
+  .index-bubble{
+    position:fixed; right:46px; top:50%; transform:translateY(-50%); z-index:31;
+    width:84px; height:84px; border-radius:18px; background:var(--accent); color:#fff;
+    font-size:46px; font-weight:800; display:none; align-items:center; justify-content:center;
+    box-shadow:0 6px 20px rgba(0,0,0,.5); pointer-events:none;
+  }
+
+  /* ---- 集計タブ ---- */
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:14px;}
+  .panel h2{margin:0 0 10px; font-size:16px;}
+  table.rank{width:100%; border-collapse:collapse; font-size:15px;}
+  table.rank th,table.rank td{padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; line-height:1.55;}
+  table.rank th{color:var(--sub); font-weight:600; font-size:13px;}
+  table.rank td.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  table.rank .r{color:var(--sub); width:30px;}
+  .bar{height:6px; background:var(--accent); border-radius:3px; margin-top:6px;}
+
+  .btnrow{display:flex; gap:8px; flex-wrap:wrap;}
+  .btn{
+    background:var(--accent2); color:#06263b; border:none; border-radius:10px;
+    padding:11px 14px; font-size:15px; font-weight:700; cursor:pointer;
+  }
+  .btn.sec{background:var(--panel2); color:var(--txt); border:1px solid var(--line);}
+  .btn.danger{background:var(--danger-bg); color:var(--danger-fg); border:1px solid var(--danger-bd);}
+  .btn:active{opacity:.85;}
+  #pieWrap{display:flex; justify-content:center;}
+  canvas{max-width:100%; height:auto; background:#fff; border-radius:10px;}
+  .note{color:var(--sub); font-size:13px; margin-top:6px;}
+  .setting{display:flex; align-items:center; gap:10px; font-size:15px; flex-wrap:wrap;}
+  .setting input{width:80px; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    border-radius:8px; padding:8px 10px; font-size:16px; text-align:right;}
+  .hidden{display:none;}
+</style>
+</head>
+<body>
+<header>
+  <div class="tabs">
+    <button id="tabInput" class="on">カウント入力</button>
+    <button id="tabAgg">集計・画像出力</button>
+    <button id="tabSettings">設定</button>
+  </div>
+</header>
+
+<main>
+  <!-- 入力ビュー -->
+  <section id="viewInput" class="view on">
+    <div class="controls">
+      <div class="search">
+        <input id="search" type="text" placeholder="タイトル名で絞り込み" autocomplete="off">
+        <button class="clr" id="searchClr" title="クリア">×</button>
+      </div>
+      <div class="seg" id="sortSeg">
+        <button data-sort="kana" class="on">50音順</button>
+        <button data-sort="count">カウント順</button>
+      </div>
+    </div>
+    <div id="grid" class="list"></div>
+    <p id="gridEmpty" class="empty hidden">該当するタイトルがありません</p>
+    <div id="indexbar" class="indexbar"></div>
+    <div id="indexBubble" class="index-bubble"></div>
+  </section>
+
+  <!-- 集計ビュー -->
+  <section id="viewAgg" class="view">
+    <div class="panel">
+      <h2>集計表（使用数・降順）</h2>
+      <div id="rankWrap"></div>
+    </div>
+
+    <div class="panel">
+      <h2>SNS投稿用 画像出力</h2>
+      <div class="btnrow">
+        <button class="btn" id="dlTable">集計表を画像保存（PNG）</button>
+        <button class="btn" id="dlPie">円グラフを画像保存（PNG）</button>
+        <button class="btn sec" id="dlBoth">2枚まとめて保存</button>
+      </div>
+      <p class="note">円グラフは使用率（％）の降順。スライスが多い場合は下位を「その他」にまとめます。</p>
+      <div id="pieWrap" style="margin-top:12px;"><canvas id="piePreview" width="720" height="520"></canvas></div>
+    </div>
+
+    <div class="panel">
+      <h2>円グラフの作成</h2>
+      <div class="setting">
+        <span>使用数</span>
+        <input id="pieThresh" type="range" min="1" max="10" step="1" value="1" style="flex:1; min-width:150px;">
+        <span><b id="pieThreshVal">1</b> 人以上を個別表示</span>
+      </div>
+      <div class="btnrow" style="margin-top:12px;">
+        <button class="btn" id="applyGraph">この設定で円グラフを作成</button>
+      </div>
+      <p class="note">スライダーで「何人以上に使われたタイトルを個別表示するか」を決めてボタンを押すと反映されます。それ未満は「その他」にまとめます。</p>
+    </div>
+  </section>
+
+  <!-- 設定ビュー -->
+  <section id="viewSettings" class="view">
+    <div class="panel">
+      <h2><span class="mark">WS</span> タイトルカウンター</h2>
+      <p class="note" style="margin-top:2px;">ヴァイスシュヴァルツ 大会タイトル集計</p>
+    </div>
+
+    <div class="panel">
+      <h2>大会情報</h2>
+      <label for="eventName" class="note" style="margin:0 0 6px; display:block;">大会名（出力画像に表示されます）</label>
+      <input id="eventName" class="ev-input" type="text" placeholder="例：第10回 地区大会" maxlength="40">
+      <p class="note" style="margin-top:12px;">参加 <b id="totalCount">0</b> 名 ／ <span id="kindCount">0</span> タイトル</p>
+    </div>
+
+    <div class="panel">
+      <h2>テーマ（色合い）</h2>
+      <div class="seg" id="themeSeg">
+        <button data-theme="dark" class="on">ダーク</button>
+        <button data-theme="light">ライト</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>データ管理</h2>
+      <div class="btnrow">
+        <button class="btn danger" id="resetBtn">カウントを全リセット</button>
+      </div>
+      <p class="note">カウントは自動でこの端末のブラウザに保存され、閉じても残ります。</p>
+    </div>
+  </section>
+</main>
+
+<!-- タイトル一覧（update_titles.ps1 で生成） -->
+<script src="titles.js"></script>
+<script>
+(function(){
+  "use strict";
+  const LS_KEY = "ws_title_counter_v1";
+  const TITLES = (window.WS_TITLES || []).slice();
+
+  // ---- 状態 ----
+  let state = { counts:{}, event:"", sort:"kana", pieThresh:1, theme:"dark" };
+  try{
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+    if(saved && typeof saved === "object"){
+      state.counts = saved.counts || {};
+      state.event  = saved.event  || "";
+      state.sort   = saved.sort   || "kana";
+      if(saved.pieThresh) state.pieThresh = saved.pieThresh;
+      if(saved.theme) state.theme = saved.theme;
+    }
+  }catch(e){}
+
+  function save(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+
+  // ---- 要素 ----
+  const $ = id => document.getElementById(id);
+  const grid = $("grid"), gridEmpty = $("gridEmpty"), search = $("search");
+  const indexbar = $("indexbar"), indexBubble = $("indexBubble");
+
+  // ---- 集計ヘルパ ----
+  const cnt = id => state.counts[id] || 0;
+  function total(){ let s=0; for(const k in state.counts) s+=state.counts[k]; return s; }
+  function kinds(){ let n=0; for(const k in state.counts) if(state.counts[k]>0) n++; return n; }
+  function maxCount(){ let m=1; for(const k in state.counts) if(state.counts[k]>m) m=state.counts[k]; return m; }
+  function titleById(id){ return TITLES.find(t=>String(t.id)===String(id)); }
+
+  function rankList(){
+    // 使用数>0 のタイトルを 使用数降順 → かな昇順 で
+    return TITLES.filter(t=>cnt(t.id)>0)
+      .sort((a,b)=> cnt(b.id)-cnt(a.id) || a.kana.localeCompare(b.kana,"ja"));
+  }
+
+  // ---- 50音 行（ぎょう）判定 ----
+  const GYOU = [
+    ["あ","あいうえおぁぃぅぇぉゔ"],
+    ["か","かきくけこがぎぐげご"],
+    ["さ","さしすせそざじずぜぞ"],
+    ["た","たちつてとだぢづでどっ"],
+    ["な","なにぬねの"],
+    ["は","はひふへほばびぶべぼぱぴぷぺぽ"],
+    ["ま","まみむめも"],
+    ["や","やゆよゃゅょ"],
+    ["ら","らりるれろ"],
+    ["わ","わをんゎ"],
+  ];
+  function gyou(kana){
+    const c = (kana||"").charAt(0);
+    for(const [g,set] of GYOU) if(set.indexOf(c)!==-1) return g;
+    return "#"; // 英数字・記号など
+  }
+
+  function rowEl(t){
+    const c = cnt(t.id);
+    const el = document.createElement("button");
+    el.className = "card" + (c>0 ? " counted":"");
+    el.dataset.id = t.id;
+    el.innerHTML =
+      '<span class="nm">'+esc(t.name)+'</span>' +
+      (c>0 ? '<span class="cnt">'+c+'</span>' : '') +
+      '<span class="minus" data-minus="1">−</span>';
+    return el;
+  }
+
+  // ---- 入力リスト描画 ----
+  function renderGrid(){
+    const q = search.value.trim().toLowerCase();
+    let list = TITLES.filter(t => !q || t.name.toLowerCase().includes(q) || t.kana.includes(q));
+    grid.innerHTML = "";
+    gridEmpty.classList.toggle("hidden", list.length>0);
+    const frag = document.createDocumentFragment();
+
+    if(state.sort === "count"){
+      // カウント順（カウント済みを上に・降順／同数は50音順）。インデックスは非表示。
+      indexbar.style.display = "none";
+      list.sort((a,b)=>{
+        const ca=cnt(a.id), cb=cnt(b.id);
+        if(cb!==ca) return cb-ca;
+        return a.kana.localeCompare(b.kana,"ja");
+      });
+      for(const t of list) frag.appendChild(rowEl(t));
+    }else{
+      // 50音順：行ごとに見出しを入れ、右側インデックスを構築。
+      list.sort((a,b)=>a.kana.localeCompare(b.kana,"ja"));
+      let curG=null; const present=[]; firstCardByGyou={};
+      for(const t of list){
+        const g = gyou(t.kana);
+        if(g!==curG){
+          curG=g; present.push(g);
+          const h=document.createElement("div");
+          h.className="sec-head"; h.id="sec-"+g; h.textContent=g;
+          frag.appendChild(h);
+        }
+        const card=rowEl(t);
+        if(!firstCardByGyou[g]) firstCardByGyou[g]=card;
+        frag.appendChild(card);
+      }
+      buildIndexBar(present);
+    }
+    grid.appendChild(frag);
+  }
+
+  // ---- 右側 50音インデックスバー ----
+  function buildIndexBar(present){
+    indexbar.innerHTML="";
+    present.forEach(g=>{
+      const b=document.createElement("div");
+      b.className="idx"; b.textContent=g; b.dataset.g=g;
+      indexbar.appendChild(b);
+    });
+    indexbar.style.display = present.length ? "flex" : "none";
+  }
+  let firstCardByGyou = {};
+  function setHH(){ document.documentElement.style.setProperty("--hh", document.querySelector("header").offsetHeight+"px"); }
+  function jumpTo(g){
+    const c = firstCardByGyou[g]; if(!c) return;
+    const hh = document.querySelector("header").offsetHeight;
+    const y = c.getBoundingClientRect().top + window.scrollY - hh - 34; // 見出し分だけ上に余白
+    window.scrollTo({top:Math.max(0,y)});
+  }
+  let bubbleTimer=null;
+  function showBubble(g){
+    indexBubble.textContent=g; indexBubble.style.display="flex";
+    clearTimeout(bubbleTimer); bubbleTimer=setTimeout(()=>indexBubble.style.display="none",450);
+  }
+  function scrub(e){
+    const t=e.touches?e.touches[0]:e;
+    const el=document.elementFromPoint(t.clientX,t.clientY);
+    const g=el && el.dataset ? el.dataset.g : null;
+    if(g){ jumpTo(g); showBubble(g); }
+  }
+  function esc(s){ return s.replace(/[&<>"]/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m])); }
+
+  grid.addEventListener("click", e=>{
+    const card = e.target.closest(".card"); if(!card) return;
+    const id = card.dataset.id;
+    if(e.target.dataset.minus){          // − ボタン
+      if(cnt(id)>0) state.counts[id] = cnt(id)-1;
+      if(state.counts[id]===0) delete state.counts[id];
+    }else{                               // カード本体 = +1
+      state.counts[id] = cnt(id)+1;
+    }
+    save(); refreshStats();
+    if(state.sort==="count"){ renderGrid(); }   // カウント順は並べ替え
+    else { updateCard(card, id); }              // 50音順はその場更新（ジャンプ防止）
+    renderRank();
+  });
+
+  function updateCard(card, id){
+    const c = cnt(id);
+    card.classList.toggle("counted", c>0);
+    let badge = card.querySelector(".cnt");
+    if(c>0){
+      if(!badge){ badge=document.createElement("span"); badge.className="cnt"; card.insertBefore(badge, card.querySelector(".minus")); }
+      badge.textContent = c;
+    }else if(badge){ badge.remove(); }
+  }
+
+  // 同数のタイトルをまとめたグループ（使用数降順）。rank は競技順位（同率は同じ順位、次は人数分繰り下げ）。
+  function rankGroups(){
+    const list = rankList();
+    const groups=[]; let rank=1;
+    list.forEach(t=>{
+      const c=cnt(t.id), g=groups[groups.length-1];
+      if(g && g.count===c) g.titles.push(t.name);
+      else groups.push({count:c, titles:[t.name], rank:0});
+    });
+    groups.forEach(g=>{ g.rank=rank; rank+=g.titles.length; });
+    return groups;
+  }
+
+  // ---- 集計表（HTML） ----
+  function renderRank(){
+    const groups = rankGroups(), tot = total();
+    const wrap = $("rankWrap");
+    if(groups.length===0){ wrap.innerHTML = '<p class="empty">まだカウントがありません</p>'; return; }
+    const maxC = groups[0].count || 1; // バーは最大値を100%として正規化
+    let rows = "";
+    groups.forEach(g=>{
+      const pct = tot? (g.count/tot*100):0, rel = g.count/maxC*100;
+      const names = g.titles.map(esc).join('<br>');
+      rows += '<tr>'+
+        '<td class="r">'+g.rank+'</td>'+
+        '<td>'+names+'<div class="bar" style="width:'+Math.max(4,rel).toFixed(1)+'%"></div></td>'+
+        '<td class="num">'+g.count+'</td>'+
+        '<td class="num">'+pct.toFixed(1)+'%</td></tr>';
+    });
+    wrap.innerHTML =
+      '<table class="rank"><thead><tr><th></th><th>タイトル</th><th class="num">使用数</th><th class="num">使用率</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody></table>';
+  }
+
+  function refreshStats(){
+    $("totalCount").textContent = total();
+    $("kindCount").textContent  = kinds();
+  }
+
+  // ================= 画像出力（Canvas） =================
+  const COLORS = ["#ff5c8a","#5cc8ff","#ffd166","#06d6a0","#c77dff","#ff924c",
+    "#4cc9f0","#f15bb5","#8ac926","#ff99c8","#00bbf9","#fee440",
+    "#9b5de5","#ef476f","#118ab2","#73d2de","#f4845f","#52b788",
+    "#b5179e","#3a86ff","#fb6f92","#80ed99"];
+
+  // 円グラフ用データ（多い場合は「その他」に集約）
+  function pieData(){
+    const list = rankList(), tot = total();
+    const T = Math.max(1, state.pieThresh || 1);     // この使用数以上を個別表示
+    const head  = list.filter(t=>cnt(t.id) >= T).map(t=>({name:t.name, value:cnt(t.id)}));
+    const below = list.filter(t=>cnt(t.id) <  T);
+    let data = head;
+    if(below.length === 1){
+      const t = below[0]; data = data.concat([{name:t.name, value:cnt(t.id)}]);
+    }else if(below.length > 1){
+      const restVal = below.reduce((s,t)=>s+cnt(t.id), 0);
+      data = data.concat([{name:"その他 "+below.length+" タイトル", value:restVal, other:true}]);
+    }
+    return { data, tot };
+  }
+
+  function headerText(){
+    const ev = ($("eventName").value || "").trim();
+    const d = new Date();
+    const ds = d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate();
+    return { title: ev || "ヴァイスシュヴァルツ タイトル使用集計", date: ds };
+  }
+
+  // --- 集計表を Canvas に描画（同率は1行にまとめ、行数を減らす） ---
+  function drawTable(scale){
+    scale = scale || 2;
+    const groups = rankGroups(), tot = total();
+    const maxC = (groups[0] ? groups[0].count : 0) || 1; // バーは最大値=100%で正規化
+    const titleCount = groups.reduce((s,g)=>s+g.titles.length,0);
+    const W = 720, headH = 96, colH = 40, footH = 30, lineH = 24;
+    // 同率タイトル数に応じた可変行高
+    const rowHs = groups.map(g=> Math.max(40, g.titles.length*lineH + 16));
+    const bodyH = rowHs.reduce((s,h)=>s+h,0);
+    const H = headH + colH + bodyH + footH;
+    const cv = document.createElement("canvas");
+    cv.width = W*scale; cv.height = H*scale;
+    const x = cv.getContext("2d"); x.scale(scale,scale);
+    const hd = headerText();
+
+    x.fillStyle="#ffffff"; x.fillRect(0,0,W,H);
+    x.fillStyle="#0f1320"; x.fillRect(0,0,W,headH);
+    x.fillStyle="#ff5c8a"; x.fillRect(0,headH-6,W,6);
+    x.fillStyle="#ffffff"; x.font="bold 26px sans-serif"; x.textBaseline="middle";
+    x.fillText(trim(x,hd.title,W-40), 24, 36);
+    x.fillStyle="#9aa6c4"; x.font="15px sans-serif";
+    x.fillText(hd.date+"　集計表（使用数・降順）　参加 "+tot+" 名 / "+titleCount+" タイトル", 24, 70);
+
+    // 列見出し
+    let y = headH;
+    x.fillStyle="#f3f5fb"; x.fillRect(0,y,W,colH);
+    x.fillStyle="#6b7494"; x.font="bold 14px sans-serif";
+    x.fillText("順位", 20, y+colH/2);
+    x.fillText("タイトル", 70, y+colH/2);
+    x.textAlign="right"; x.fillText("使用数", W-150, y+colH/2); x.fillText("使用率", W-30, y+colH/2); x.textAlign="left";
+    y += colH;
+
+    groups.forEach((g,gi)=>{
+      const rh=rowHs[gi], c=g.count, pct=tot?(c/tot*100):0;
+      if(gi%2===1){ x.fillStyle="#f7f8fc"; x.fillRect(0,y,W,rh); }
+      // バー（行下部・最大値=100%で正規化）
+      x.fillStyle="#ff5c8a"; x.fillRect(70, y+rh-9, (W-260)*(c/maxC), 4);
+      // 順位（上寄せ）
+      x.fillStyle="#9aa6c4"; x.font="bold 16px sans-serif";
+      x.fillText(String(g.rank), 24, y+20);
+      // タイトル（同率は縦に並べる）
+      x.fillStyle="#1a2032"; x.font="16px sans-serif";
+      g.titles.forEach((nm,ti)=>{ x.fillText(trim(x,nm,W-260), 70, y+18+ti*lineH); });
+      // 使用数・使用率（上寄せ）
+      x.textAlign="right"; x.fillStyle="#1a2032"; x.font="bold 16px sans-serif";
+      x.fillText(String(c), W-150, y+20);
+      x.fillStyle="#5b6680"; x.font="15px sans-serif";
+      x.fillText(pct.toFixed(1)+"%", W-30, y+20);
+      x.textAlign="left";
+      y += rh;
+    });
+    x.fillStyle="#9aa6c4"; x.font="12px sans-serif";
+    x.fillText("WS タイトルカウンター", 24, y+18);
+    return cv;
+  }
+
+  // --- 円グラフを Canvas に描画 ---
+  function drawPie(scale, target){
+    scale = scale || 2;
+    const {data, tot} = pieData();
+    const W = 720, headH = 84, footH = 30;
+    const hd = headerText();
+
+    // 凡例フォント：最多=maxF、少ないほど段階縮小（下限minF）。「その他」は最小固定。
+    const maxVal = data.length ? data[0].value : 1;
+    const maxF = 22, minF = 12;
+    const fsFor = d => d.other ? minF : Math.round(minF + (maxF-minF)*(d.value/(maxVal||1)));
+    const lineHs = data.map(d=> fsFor(d) + 10);
+    const legendH = lineHs.reduce((s,h)=>s+h, 0);
+
+    const R = 130, pieTop = 20;                            // 円グラフは上寄せ
+    const pieAreaH = 2*R + 40;
+    const bodyH = Math.max(pieAreaH, legendH + 10);        // 内容に応じて高さ可変
+    const H = headH + bodyH + footH;
+
+    const cv = target || document.createElement("canvas");
+    cv.width = W*scale; cv.height = H*scale;
+    const x = cv.getContext("2d"); x.setTransform(scale,0,0,scale,0,0);
+
+    x.clearRect(0,0,W,H); x.fillStyle="#ffffff"; x.fillRect(0,0,W,H);
+    // ヘッダ
+    x.fillStyle="#0f1320"; x.fillRect(0,0,W,headH);
+    x.fillStyle="#5cc8ff"; x.fillRect(0,headH-6,W,6);
+    x.fillStyle="#ffffff"; x.font="bold 24px sans-serif"; x.textBaseline="middle";
+    x.fillText(trim(x,hd.title,W-40), 24, 32);
+    x.fillStyle="#9aa6c4"; x.font="14px sans-serif";
+    x.fillText(hd.date+"　タイトル使用率（％・降順）　参加 "+tot+" 名", 24, 62);
+
+    if(tot===0 || data.length===0){
+      x.fillStyle="#9aa6c4"; x.font="18px sans-serif"; x.textAlign="center";
+      x.fillText("まだカウントがありません", W/2, H/2); x.textAlign="left"; return cv;
+    }
+
+    // 円グラフ（左・上寄せ）
+    const cx=200, cy=headH + pieTop + R;
+    let ang = -Math.PI/2;
+    data.forEach((d,i)=>{
+      const slice = d.value/tot*Math.PI*2;
+      x.beginPath(); x.moveTo(cx,cy);
+      x.arc(cx,cy,R,ang,ang+slice); x.closePath();
+      x.fillStyle = COLORS[i%COLORS.length]; x.fill();
+      x.strokeStyle="#ffffff"; x.lineWidth=2; x.stroke();
+      const pct = d.value/tot*100;
+      if(pct>=7){
+        const mid=ang+slice/2, lr=R*0.62;
+        x.fillStyle="#ffffff"; x.font="bold 15px sans-serif"; x.textAlign="center"; x.textBaseline="middle";
+        x.fillText(pct.toFixed(0)+"%", cx+Math.cos(mid)*lr, cy+Math.sin(mid)*lr);
+        x.textAlign="left";
+      }
+      ang += slice;
+    });
+
+    // 凡例（右・使用率順にフォントを段階縮小、枠内に収まるよう名前を切り詰め）
+    const lx=400, legendRight=W-18;
+    let ly = headH + pieTop;
+    x.textBaseline="middle"; x.textAlign="left";
+    data.forEach((d,i)=>{
+      const fs=fsFor(d), rowH=lineHs[i], mid=ly+rowH/2;
+      const sw=Math.round(fs*0.8);                          // 色見本サイズもフォント連動
+      const dispVal = d.tieValue!=null ? d.tieValue : d.value;  // 同率は元々のカウント数で表記（合計しない）
+      const pct = dispVal/tot*100;
+      const suffix = "  "+dispVal+"（"+pct.toFixed(1)+"%）";
+      x.font=fs+"px sans-serif";
+      const avail = legendRight - (lx+sw+8) - x.measureText(suffix).width;
+      const nm = trim(x, d.name, Math.max(40,avail));
+      x.fillStyle=COLORS[i%COLORS.length]; x.fillRect(lx, mid-sw/2, sw, sw);
+      x.fillStyle="#1a2032"; x.fillText(nm+suffix, lx+sw+8, mid);
+      ly += rowH;
+    });
+    x.fillStyle="#9aa6c4"; x.font="12px sans-serif";
+    x.fillText("WS タイトルカウンター", 24, H-16);
+    return cv;
+  }
+
+  function trim(ctx, s, max){
+    if(ctx.measureText(s).width<=max) return s;
+    let t=s;
+    while(t.length>1 && ctx.measureText(t+"…").width>max) t=t.slice(0,-1);
+    return t+"…";
+  }
+
+  function fname(suffix){
+    const ev=($("eventName").value||"集計").trim().replace(/[\\/:*?"<>|]/g,"_");
+    const d=new Date(), p=n=>String(n).padStart(2,"0");
+    return ev+"_"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"_"+suffix+".png";
+  }
+  function download(cv, name){
+    const a=document.createElement("a");
+    a.href=cv.toDataURL("image/png"); a.download=name; a.click();
+  }
+
+  // ================= イベント =================
+  $("tabInput").onclick    = ()=>switchTab("input");
+  $("tabAgg").onclick      = ()=>switchTab("agg");
+  $("tabSettings").onclick = ()=>switchTab("settings");
+  function switchTab(t){
+    $("tabInput").classList.toggle("on", t==="input");
+    $("tabAgg").classList.toggle("on", t==="agg");
+    $("tabSettings").classList.toggle("on", t==="settings");
+    $("viewInput").classList.toggle("on", t==="input");
+    $("viewAgg").classList.toggle("on", t==="agg");
+    $("viewSettings").classList.toggle("on", t==="settings");
+    if(t==="agg"){ renderRank(); syncThreshSlider(); drawPie(2,$("piePreview")); }
+  }
+
+  // テーマ切替
+  function applyTheme(){
+    document.body.classList.toggle("light", state.theme==="light");
+    [...$("themeSeg").children].forEach(b=>b.classList.toggle("on", b.dataset.theme===state.theme));
+  }
+  $("themeSeg").addEventListener("click", e=>{
+    const b=e.target.closest("button[data-theme]"); if(!b) return;
+    state.theme=b.dataset.theme; save(); applyTheme();
+  });
+
+  $("sortSeg").addEventListener("click", e=>{
+    const b=e.target.closest("button[data-sort]"); if(!b) return;
+    state.sort=b.dataset.sort; save();
+    [...$("sortSeg").children].forEach(x=>x.classList.toggle("on", x===b));
+    renderGrid();
+  });
+
+  indexbar.addEventListener("click", e=>{ const g=e.target.dataset.g; if(g){ jumpTo(g); showBubble(g);} });
+  indexbar.addEventListener("touchstart", e=>{ e.preventDefault(); scrub(e); }, {passive:false});
+  indexbar.addEventListener("touchmove",  e=>{ e.preventDefault(); scrub(e); }, {passive:false});
+
+  let stim=null;
+  search.addEventListener("input", ()=>{ clearTimeout(stim); stim=setTimeout(renderGrid,120); });
+  $("searchClr").onclick = ()=>{ search.value=""; renderGrid(); search.focus(); };
+
+  $("eventName").value = state.event;
+  $("eventName").addEventListener("input", e=>{ state.event=e.target.value; save(); });
+
+  // スライダー（使用数しきい値）。動かしても数値表示のみ更新し、グラフは作成ボタンで反映。
+  function syncThreshSlider(){
+    const mc = maxCount(), sl = $("pieThresh");
+    sl.max = mc;
+    if(state.pieThresh > mc) state.pieThresh = mc;
+    if(state.pieThresh < 1)  state.pieThresh = 1;
+    sl.value = state.pieThresh;
+    $("pieThreshVal").textContent = state.pieThresh;
+  }
+  $("pieThresh").addEventListener("input", e=>{ $("pieThreshVal").textContent = e.target.value; });
+  $("applyGraph").addEventListener("click", ()=>{
+    state.pieThresh = parseInt($("pieThresh").value,10) || 1; save();
+    drawPie(2, $("piePreview"));
+  });
+
+  $("dlTable").onclick = ()=>download(drawTable(2), fname("集計表"));
+  $("dlPie").onclick   = ()=>download(drawPie(2),   fname("円グラフ"));
+  $("dlBoth").onclick  = ()=>{ download(drawTable(2),fname("集計表")); setTimeout(()=>download(drawPie(2),fname("円グラフ")),300); };
+
+  $("resetBtn").onclick = ()=>{
+    if(confirm("カウントを全てリセットします。よろしいですか？")){
+      state.counts={}; save(); refreshStats(); renderGrid(); renderRank(); drawPie(2,$("piePreview"));
+    }
+  };
+
+  // ---- 初期化 ----
+  applyTheme();
+  setHH(); window.addEventListener("resize", setHH);
+  if(TITLES.length===0){
+    grid.innerHTML = '<p class="empty">titles.js が読み込めませんでした。<br>update_titles.ps1 を実行して titles.js を生成してください。</p>';
+  }else{
+    [...$("sortSeg").children].forEach(x=>x.classList.toggle("on", x.dataset.sort===state.sort));
+    renderGrid();
+  }
+  refreshStats(); renderRank();
+})();
+</script>
+</body>
+</html>

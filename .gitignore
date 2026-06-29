@@ -1,0 +1,25 @@
+# OS が作る不要ファイル
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# エディタ / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# 一時ファイル
+_*.js
+*.tmp
+*.log
+
+# アプリが書き出す集計画像（手元保存用・リポジトリには含めない）
+*_集計表.png
+*_円グラフ.png
+
+# 更新・push 用スクリプト（ローカル管理用。公開リポジトリには含めない）
+update_titles.ps1
+update_and_push.bat
