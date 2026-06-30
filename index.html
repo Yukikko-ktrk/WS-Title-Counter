@@ -135,6 +135,14 @@
   .setting input{width:80px; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
     border-radius:8px; padding:8px 10px; font-size:16px; text-align:right;}
   .hidden{display:none;}
+
+  /* 手動追加タイトル一覧 */
+  .custom-item{display:flex; align-items:center; gap:10px; padding:8px 10px;
+    background:var(--panel2); border:1px solid var(--line); border-radius:8px; margin-bottom:6px;}
+  .custom-item .nm{flex:1; word-break:break-word;}
+  .custom-item .del{flex:0 0 auto; width:34px; height:34px; border-radius:8px;
+    border:1px solid var(--danger-bd); background:var(--danger-bg); color:var(--danger-fg);
+    font-size:18px; line-height:1; cursor:pointer;}
 </style>
 </head>
 <body>
@@ -226,6 +234,22 @@
       </div>
       <p class="note">カウントは自動でこの端末のブラウザに保存され、閉じても残ります。</p>
     </div>
+
+    <div class="panel">
+      <h2>タイトルの手動追加</h2>
+      <p class="note" style="margin-top:2px;">一覧に無いタイトルをその場で追加できます（タイトル一覧の更新し忘れ対策）。追加したタイトルはカウント入力・集計・グラフに反映されます。</p>
+      <div id="customInputs" style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+        <input class="ev-input customIn" type="text" placeholder="追加するタイトル名 ①" maxlength="60">
+        <input class="ev-input customIn" type="text" placeholder="追加するタイトル名 ②" maxlength="60">
+        <input class="ev-input customIn" type="text" placeholder="追加するタイトル名 ③" maxlength="60">
+        <input class="ev-input customIn" type="text" placeholder="追加するタイトル名 ④" maxlength="60">
+        <input class="ev-input customIn" type="text" placeholder="追加するタイトル名 ⑤" maxlength="60">
+      </div>
+      <div class="btnrow" style="margin-top:10px;">
+        <button class="btn" id="addCustomBtn">タイトルを追加</button>
+      </div>
+      <div id="customList" style="margin-top:14px;"></div>
+    </div>
   </section>
 </main>
 
@@ -238,7 +262,7 @@
   const TITLES = (window.WS_TITLES || []).slice();
 
   // ---- 状態 ----
-  let state = { counts:{}, event:"", sort:"kana", pieThresh:1, theme:"dark" };
+  let state = { counts:{}, event:"", sort:"kana", pieThresh:1, theme:"dark", custom:[], customSeq:0 };
   try{
     const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
     if(saved && typeof saved === "object"){
@@ -247,6 +271,8 @@
       state.sort   = saved.sort   || "kana";
       if(saved.pieThresh) state.pieThresh = saved.pieThresh;
       if(saved.theme) state.theme = saved.theme;
+      if(Array.isArray(saved.custom)) state.custom = saved.custom;
+      if(saved.customSeq) state.customSeq = saved.customSeq;
     }
   }catch(e){}
 
@@ -262,11 +288,13 @@
   function total(){ let s=0; for(const k in state.counts) s+=state.counts[k]; return s; }
   function kinds(){ let n=0; for(const k in state.counts) if(state.counts[k]>0) n++; return n; }
   function maxCount(){ let m=1; for(const k in state.counts) if(state.counts[k]>m) m=state.counts[k]; return m; }
-  function titleById(id){ return TITLES.find(t=>String(t.id)===String(id)); }
+  // 焼き込みタイトル + 手動追加タイトル
+  function allTitles(){ return TITLES.concat(state.custom || []); }
+  function titleById(id){ return allTitles().find(t=>String(t.id)===String(id)); }
 
   function rankList(){
     // 使用数>0 のタイトルを 使用数降順 → かな昇順 で
-    return TITLES.filter(t=>cnt(t.id)>0)
+    return allTitles().filter(t=>cnt(t.id)>0)
       .sort((a,b)=> cnt(b.id)-cnt(a.id) || a.kana.localeCompare(b.kana,"ja"));
   }
 
@@ -284,9 +312,11 @@
     ["わ","わをんゎ"],
   ];
   function gyou(kana){
-    const c = (kana||"").charAt(0);
+    let c = (kana||"").charAt(0);
+    const code = c.charCodeAt(0);
+    if(code>=0x30A1 && code<=0x30F6) c = String.fromCharCode(code-0x60); // カタカナ→ひらがな
     for(const [g,set] of GYOU) if(set.indexOf(c)!==-1) return g;
-    return "#"; // 英数字・記号など
+    return "#"; // 漢字・英数字・記号など
   }
 
   function rowEl(t){
@@ -304,7 +334,7 @@
   // ---- 入力リスト描画 ----
   function renderGrid(){
     const q = search.value.trim().toLowerCase();
-    let list = TITLES.filter(t => !q || t.name.toLowerCase().includes(q) || t.kana.includes(q));
+    let list = allTitles().filter(t => !q || t.name.toLowerCase().includes(q) || t.kana.includes(q));
     grid.innerHTML = "";
     gridEmpty.classList.toggle("hidden", list.length>0);
     const frag = document.createDocumentFragment();
@@ -682,16 +712,62 @@
     }
   };
 
+  // ---- タイトルの手動追加 ----
+  function renderCustomList(){
+    const wrap=$("customList");
+    if(!state.custom.length){ wrap.innerHTML='<p class="note" style="margin:0;">手動追加したタイトルはまだありません。</p>'; return; }
+    wrap.innerHTML =
+      '<p class="note" style="margin:0 0 8px;">追加済みのタイトル（'+state.custom.length+'）</p>' +
+      state.custom.map(t=>{
+        const c=cnt(t.id);
+        return '<div class="custom-item"><span class="nm">'+esc(t.name)+
+          (c>0?' <span style="color:var(--accent2);font-weight:700;">（'+c+'）</span>':'')+'</span>'+
+          '<button class="del" data-id="'+t.id+'" title="削除">×</button></div>';
+      }).join("");
+  }
+
+  $("addCustomBtn").onclick = ()=>{
+    const inputs=[...document.querySelectorAll("#customInputs .customIn")];
+    const names=inputs.map(i=>i.value.trim()).filter(n=>n);
+    if(names.length===0){ alert("追加するタイトル名を入力してください。"); return; }
+    const existing=new Set(allTitles().map(t=>t.name));
+    let added=0, dup=0;
+    names.forEach(nm=>{
+      if(existing.has(nm)){ dup++; return; }
+      existing.add(nm);
+      state.custom.push({ id:"c"+(++state.customSeq), name:nm, kana:nm, custom:true });
+      added++;
+    });
+    save();
+    inputs.forEach(i=>i.value="");
+    renderCustomList(); renderGrid(); refreshStats(); renderRank();
+    let msg = added+" 件のタイトルを追加しました。";
+    if(dup>0) msg += "（"+dup+" 件は既存・重複のため除外）";
+    alert(msg);
+  };
+
+  $("customList").addEventListener("click", e=>{
+    const b=e.target.closest(".del"); if(!b) return;
+    const id=b.dataset.id, t=state.custom.find(x=>x.id===id); if(!t) return;
+    const c=cnt(id);
+    if(c>0 && !confirm("「"+t.name+"」を削除します。カウント（"+c+"）も消えます。よろしいですか？")) return;
+    state.custom=state.custom.filter(x=>x.id!==id);
+    delete state.counts[id];
+    save();
+    renderCustomList(); renderGrid(); refreshStats(); renderRank();
+    if(state.sort!=="count"){ /* 50音順は再描画済み */ }
+  });
+
   // ---- 初期化 ----
   applyTheme();
   setHH(); window.addEventListener("resize", setHH);
-  if(TITLES.length===0){
-    grid.innerHTML = '<p class="empty">titles.js が読み込めませんでした。<br>update_titles.ps1 を実行して titles.js を生成してください。</p>';
+  if(allTitles().length===0){
+    grid.innerHTML = '<p class="empty">titles.js が読み込めませんでした。<br>update_titles.ps1 を実行して titles.js を生成するか、<br>設定タブの「タイトルの手動追加」から登録してください。</p>';
   }else{
     [...$("sortSeg").children].forEach(x=>x.classList.toggle("on", x.dataset.sort===state.sort));
     renderGrid();
   }
-  refreshStats(); renderRank();
+  refreshStats(); renderRank(); renderCustomList();
 })();
 </script>
 </body>
